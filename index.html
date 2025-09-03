@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blood Donor Registry</title>
+  <style>
+    :root{--accent:#c62828;--muted:#666}
+    body{font-family:Inter, system-ui, Arial, sans-serif; margin:0; padding:20px; background:#fff6f6; color:#222}
+    .container{max-width:900px;margin:0 auto}
+    header{display:flex;align-items:center;gap:12px}
+    h1{margin:6px 0;color:var(--accent)}
+    .card{background:#fff;padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.06);margin-top:16px}
+    form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+    label{display:block;font-size:13px;color:var(--muted)}
+    input,select,button,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #eee;font-size:15px}
+    button{cursor:pointer;background:var(--accent);color:#fff;border:none}
+    .donor-list{margin-top:16px;display:grid;gap:10px}
+    .donor{display:flex;justify-content:space-between;gap:10px;padding:10px;border-radius:8px;border:1px solid #fde2e2;background:#fff}
+    .meta{font-size:13px;color:var(--muted)}
+    .badge{background:#ffdada;color:var(--accent);padding:6px 10px;border-radius:20px;font-weight:600}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    @media (max-width:480px){header{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21s-6-4.35-8-7a8 8 0 0116 0c-2 2.65-8 7-8 7z" fill="#c62828"/></svg>
+      <div>
+        <h1>Blood Donor Registry</h1>
+        <div class="meta">Add donors, search by blood group and share urgent requests.</div>
+      </div>
+    </header>
+
+    <div class="card">
+      <h3>Register as a Donor</h3>
+      <form id="donorForm">
+        <div>
+          <label for="name">Full name</label>
+          <input id="name" required placeholder="e.g. Priya Kumar">
+        </div>
+        <div>
+          <label for="age">Age</label>
+          <input id="age" type="number" min="18" max="65" required placeholder="18">
+        </div>
+        <div>
+          <label for="blood">Blood Group</label>
+          <select id="blood" required>
+            <option value="">Choose</option>
+            <option>A+</option>
+            <option>A-</option>
+            <option>B+</option>
+            <option>B-</option>
+            <option>O+</option>
+            <option>O-</option>
+            <option>AB+</option>
+            <option>AB-</option>
+          </select>
+        </div>
+        <div>
+          <label for="contact">Phone / Contact</label>
+          <input id="contact" placeholder="+91 9xxxxxxxxx" required>
+        </div>
+        <div>
+          <label for="city">City</label>
+          <input id="city" placeholder="e.g. Hyderabad">
+        </div>
+        <div>
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes" rows="2" placeholder="Available weekdays, willing to travel, etc."></textarea>
+        </div>
+        <div style="grid-column:1/-1;display:flex;gap:8px;align-items:center">
+          <button type="submit">Add Donor</button>
+          <button type="button" id="clearStorage" style="background:#aaa">Clear All</button>
+          <div style="margin-left:auto" class="controls">
+            <select id="filterBlood" aria-label="Filter by blood group">
+              <option value="">All blood groups</option>
+              <option>A+</option>
+              <option>A-</option>
+              <option>B+</option>
+              <option>B-</option>
+              <option>O+</option>
+              <option>O-</option>
+              <option>AB+</option>
+              <option>AB-</option>
+            </select>
+            <button type="button" id="urgentBtn" style="background:#ff5252">Show O- / urgent</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="donorList" class="donor-list" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script>
+    // Simple client-side donor registry using localStorage
+    const form = document.getElementById('donorForm');
+    const donorList = document.getElementById('donorList');
+    const STORAGE_KEY = 'blood_donors_v1';
+
+    function loadDonors(){
+      try{
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      }catch(e){return []}
+    }
+
+    function saveDonors(arr){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    }
+
+    function renderList(filter){
+      const donors = loadDonors();
+      donorList.innerHTML = '';
+      const filtered = donors.filter(d => !filter || d.blood === filter);
+      if(filtered.length===0){ donorList.innerHTML = '<div class="meta">No donors found.</div>'; return }
+      filtered.forEach(d => {
+        const el = document.createElement('div');
+        el.className = 'donor';
+        el.innerHTML = `
+          <div>
+            <strong>${escapeHtml(d.name)}</strong>
+            <div class="meta">${d.blood} · ${d.age} yrs · ${escapeHtml(d.city||'—')}</div>
+            <div class="meta">${escapeHtml(d.notes||'')}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="badge">${escapeHtml(d.contact)}</div>
+            <div style="margin-top:8px"><button onclick="shareDonor('${d.id}')">Share</button></div>
+          </div>`;
+        donorList.appendChild(el);
+      })
+    }
+
+    function escapeHtml(s){ if(!s) return ''; return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+    form.addEventListener('submit', e=>{
+      e.preventDefault();
+      const donors = loadDonors();
+      const newD = {
+        id: Date.now().toString(36),
+        name: document.getElementById('name').value.trim(),
+        age: document.getElementById('age').value,
+        blood: document.getElementById('blood').value,
+        contact: document.getElementById('contact').value.trim(),
+        city: document.getElementById('city').value.trim(),
+        notes: document.getElementById('notes').value.trim()
+      };
+      donors.unshift(newD);
+      saveDonors(donors);
+      form.reset();
+      renderList(document.getElementById('filterBlood').value);
+    });
+
+    document.getElementById('filterBlood').addEventListener('change', e=>{
+      renderList(e.target.value);
+    });
+
+    document.getElementById('urgentBtn').addEventListener('click', ()=>{
+      // show donors with O- (rare) as example of urgent group
+      renderList('O-');
+    });
+
+    document.getElementById('clearStorage').addEventListener('click', ()=>{
+      if(confirm('Clear all donors from local storage?')){ localStorage.removeItem(STORAGE_KEY); renderList(); }
+    });
+
+    function shareDonor(id){
+      const donors = loadDonors();
+      const d = donors.find(x=>x.id===id);
+      if(!d) return alert('Donor not found');
+      const text = `${d.name} (${d.blood}, ${d.age} yrs) - Contact: ${d.contact} ${d.city?('\nCity: '+d.city):''}`;
+      if(navigator.share){
+        navigator.share({title:'Blood donor', text});
+      }else{
+        prompt('Copy this info to share', text);
+      }
+    }
+
+    // initial render
+    renderList();
+  </script>
+</body>
+</html>
